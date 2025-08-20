@@ -1,6 +1,6 @@
 # ProxyGen
 
-Multi-cloud secure proxy deployment tool for AWS, Azure, DigitalOcean, and Hetzner.
+Multi-cloud secure proxy/endpoint deployment tool for AWS, Azure, DigitalOcean, and Hetzner. Allowing traffic routing through cloud providers
 
 > **Provider Status**: DigitalOcean and Hetzner Cloud support are currently in **ALPHA** - semi-tested and may require manual intervention. AWS and Azure are fully supported.
 
