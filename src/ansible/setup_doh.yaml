@@ -1,0 +1,103 @@
+---
+- name: Setup DNS-over-HTTPS
+  block:
+    - name: Install dnscrypt-proxy
+      package:
+        name: dnscrypt-proxy2
+        state: present
+    
+    - name: Install stubby for DNS-over-TLS
+      package:
+        name: stubby
+        state: present
+    
+    - name: Configure dnscrypt-proxy for {{ doh_provider }}
+      template:
+        src: dnscrypt-proxy.toml.j2
+        dest: /etc/dnscrypt-proxy/dnscrypt-proxy.toml
+        mode: '0644'
+      vars:
+        provider_config: "{{ doh_providers[doh_provider] }}"
+    
+    - name: Configure systemd-resolved for DNS-over-TLS
+      copy:
+        content: |
+          [Resolve]
+          DNS={{ doh_providers[doh_provider].servers | join(' ') }}
+          FallbackDNS=1.1.1.1 8.8.8.8
+          Domains=~.
+          DNSSEC=yes
+          DNSOverTLS=yes
+          DNSStubListener=no
+        dest: /etc/systemd/resolved.conf
+        mode: '0644'
+    
+    - name: Create stubby configuration
+      template:
+        src: stubby.yaml.j2
+        dest: /etc/stubby/stubby.yml
+        mode: '0644'
+    
+    - name: Disable systemd-resolved stub listener
+      lineinfile:
+        path: /etc/systemd/resolved.conf
+        regexp: '^#?DNSStubListener='
+        line: 'DNSStubListener=no'
+    
+    - name: Start and enable dnscrypt-proxy
+      systemd:
+        name: dnscrypt-proxy
+        enabled: yes
+        state: started
+        daemon_reload: yes
+    
+    - name: Configure iptables for DNS hijacking
+      iptables:
+        table: nat
+        chain: OUTPUT
+        destination: "0.0.0.0/0"
+        protocol: udp
+        destination_port: "53"
+        jump: REDIRECT
+        to_ports: "5353"
+        comment: "Redirect DNS to dnscrypt-proxy"
+    
+    - name: Configure iptables for DNS over TCP
+      iptables:
+        table: nat
+        chain: OUTPUT
+        destination: "0.0.0.0/0"
+        protocol: tcp
+        destination_port: "53"
+        jump: REDIRECT
+        to_ports: "5353"
+        comment: "Redirect DNS TCP to dnscrypt-proxy"
+    
+    - name: Block plain DNS to prevent leaks
+      iptables:
+        chain: OUTPUT
+        destination: "0.0.0.0/0"
+        protocol: udp
+        destination_port: "53"
+        jump: DROP
+        uid_owner: "!dnscrypt-proxy"
+        comment: "Block plain DNS except dnscrypt-proxy"
+  
+  vars:
+    doh_providers:
+      cloudflare:
+        servers: ["1.1.1.1", "1.0.0.1"]
+        url: "https://cloudflare-dns.com/dns-query"
+        hostname: "cloudflare-dns.com"
+      quad9:
+        servers: ["9.9.9.9", "149.112.112.112"]
+        url: "https://dns.quad9.net/dns-query"
+        hostname: "dns.quad9.net"
+      nextdns:
+        servers: ["45.90.28.0", "45.90.30.0"]
+        url: "https://dns.nextdns.io"
+        hostname: "dns.nextdns.io"
+      adguard:
+        servers: ["94.140.14.14", "94.140.15.15"]
+        url: "https://dns.adguard.com/dns-query"
+        hostname: "dns.adguard.com"

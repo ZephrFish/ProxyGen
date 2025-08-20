@@ -1,0 +1,27 @@
+#!/bin/bash
+# WireGuard Configuration Backup Script
+
+BACKUP_DIR="/var/backups/wireguard"
+TIMESTAMP=$(date +%Y%m%d_%H%M%S)
+BACKUP_FILE="$BACKUP_DIR/wireguard_backup_$TIMESTAMP.tar.gz"
+RETENTION_DAYS=30
+
+# Create backup directory if it doesn't exist
+mkdir -p "$BACKUP_DIR"
+
+# Create backup
+tar -czf "$BACKUP_FILE" \
+    /etc/wireguard/ \
+    /var/log/wireguard-monitor.log \
+    2>/dev/null
+
+if [ $? -eq 0 ]; then
+    echo "$(date '+%Y-%m-%d %H:%M:%S') - Backup created successfully: $BACKUP_FILE"
+    
+    # Remove old backups
+    find "$BACKUP_DIR" -name "wireguard_backup_*.tar.gz" -mtime +$RETENTION_DAYS -delete
+    echo "$(date '+%Y-%m-%d %H:%M:%S') - Old backups cleaned up (older than $RETENTION_DAYS days)"
+else
+    echo "$(date '+%Y-%m-%d %H:%M:%S') - Backup failed!" >&2
+    exit 1
+fi

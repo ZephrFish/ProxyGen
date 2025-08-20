@@ -1,0 +1,183 @@
+---
+- name: Configure WireGuard Proxy Server
+  hosts: all
+  become: yes
+  gather_facts: yes
+  
+  vars:
+    wireguard_interface: "{{ wireguard_interface | default('wg0') }}"
+    wireguard_port: "{{ wireguard_port | default(51820) }}"
+    wireguard_subnet: "{{ wireguard_subnet | default('10.0.0.0/24') }}"
+    wireguard_server_ip: "{{ wireguard_subnet | regex_replace('0/24$', '1/24') }}"
+    
+  tasks:
+    - name: Wait for apt lock to be released
+      shell: |
+        while fuser /var/lib/dpkg/lock-frontend >/dev/null 2>&1 || fuser /var/lib/dpkg/lock >/dev/null 2>&1 || fuser /var/cache/apt/archives/lock >/dev/null 2>&1; do 
+          echo "Waiting for apt lock to be released..."
+          sleep 2
+        done
+        # Wait for cloud-init to complete
+        cloud-init status --wait || true
+      when: ansible_os_family == "Debian"
+      timeout: 600
+      
+    - name: Update apt cache
+      apt:
+        update_cache: yes
+        cache_valid_time: 3600
+      when: ansible_os_family == "Debian"
+    
+    - name: Install required packages
+      package:
+        name:
+          - wireguard
+          - wireguard-tools
+          - iptables
+          - iptables-persistent
+          - python3-pip
+          - qrencode
+          - ufw
+        state: present
+    
+    - name: Enable IP forwarding
+      sysctl:
+        name: "{{ item }}"
+        value: '1'
+        sysctl_set: yes
+        state: present
+        reload: yes
+      loop:
+        - net.ipv4.ip_forward
+        - net.ipv6.conf.all.forwarding
+    
+    - name: Create WireGuard directory
+      file:
+        path: /etc/wireguard
+        state: directory
+        mode: '0700'
+        owner: root
+        group: root
+    
+    - name: Configure WireGuard interface
+      template:
+        src: wg0.conf.j2
+        dest: "/etc/wireguard/{{ wireguard_interface }}.conf"
+        mode: '0600'
+        owner: root
+        group: root
+      notify: restart wireguard
+    
+    - name: Get primary network interface
+      set_fact:
+        primary_interface: "{{ ansible_default_ipv4.interface }}"
+    
+    - name: Configure iptables for NAT
+      iptables:
+        table: nat
+        chain: POSTROUTING
+        out_interface: "{{ primary_interface }}"
+        jump: MASQUERADE
+        comment: WireGuard NAT rule
+      notify: save iptables
+    
+    - name: Configure iptables for forwarding
+      iptables:
+        chain: FORWARD
+        in_interface: "{{ wireguard_interface }}"
+        jump: ACCEPT
+        comment: WireGuard forward rule
+      notify: save iptables
+    
+    - name: Configure UFW default policies
+      ufw:
+        direction: "{{ item.direction }}"
+        policy: "{{ item.policy }}"
+      loop:
+        - { direction: 'incoming', policy: 'deny' }
+        - { direction: 'outgoing', policy: 'allow' }
+        - { direction: 'routed', policy: 'allow' }
+    
+    - name: Allow SSH through UFW
+      ufw:
+        rule: allow
+        port: '22'
+        proto: tcp
+        comment: SSH access
+    
+    - name: Allow WireGuard through UFW
+      ufw:
+        rule: allow
+        port: "{{ wireguard_port | string }}"
+        proto: udp
+        comment: WireGuard Proxy
+    
+    - name: Enable UFW
+      ufw:
+        state: enabled
+    
+    - name: Start and enable WireGuard service
+      systemd:
+        name: "wg-quick@{{ wireguard_interface }}"
+        enabled: yes
+        state: started
+        daemon_reload: yes
+    
+    - name: Create client configurations directory
+      file:
+        path: /etc/wireguard/clients
+        state: directory
+        mode: '0700'
+        owner: root
+        group: root
+    
+    - name: Install monitoring script
+      template:
+        src: monitor.sh.j2
+        dest: /usr/local/bin/wireguard-monitor
+        mode: '0755'
+        owner: root
+        group: root
+    
+    - name: Setup monitoring cron job
+      cron:
+        name: "WireGuard monitoring"
+        minute: "*/5"
+        job: "/usr/local/bin/wireguard-monitor"
+        user: root
+    
+    - name: Create backup script
+      template:
+        src: backup.sh.j2
+        dest: /usr/local/bin/wireguard-backup
+        mode: '0755'
+        owner: root
+        group: root
+    
+    - name: Setup backup cron job
+      cron:
+        name: "WireGuard configuration backup"
+        hour: "2"
+        minute: "0"
+        job: "/usr/local/bin/wireguard-backup"
+        user: root
+    
+    - name: Display WireGuard status
+      command: wg show
+      register: wg_status
+      changed_when: false
+    
+    - name: Show WireGuard status
+      debug:
+        var: wg_status.stdout_lines
+  
+  handlers:
+    - name: restart wireguard
+      systemd:
+        name: "wg-quick@{{ wireguard_interface }}"
+        state: restarted
+    
+    - name: save iptables
+      shell: |
+        iptables-save > /etc/iptables/rules.v4
+        ip6tables-save > /etc/iptables/rules.v6

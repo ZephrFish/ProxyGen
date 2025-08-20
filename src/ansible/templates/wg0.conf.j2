@@ -1,0 +1,11 @@
+[Interface]
+Address = {{ wireguard_server_ip }}
+PrivateKey = {{ wireguard_private_key }}
+ListenPort = {{ wireguard_port }}
+SaveConfig = false
+
+# PostUp and PostDown rules for NAT
+PostUp = iptables -A FORWARD -i %i -j ACCEPT; iptables -A FORWARD -o %i -j ACCEPT; iptables -t nat -A POSTROUTING -o {{ primary_interface | default('eth0') }} -j MASQUERADE
+PostDown = iptables -D FORWARD -i %i -j ACCEPT; iptables -D FORWARD -o %i -j ACCEPT; iptables -t nat -D POSTROUTING -o {{ primary_interface | default('eth0') }} -j MASQUERADE
+
+# Client configurations will be added below

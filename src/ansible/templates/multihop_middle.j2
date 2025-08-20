@@ -1,0 +1,58 @@
+# Multi-Hop Middle Node Configuration
+# Role: Middle relay in multi-hop chain
+# Server: {{ server_id }}
+
+[Interface]
+Address = {{ internal_ip }}/24
+PrivateKey = {{ wireguard_private_key }}
+ListenPort = {{ wireguard_port }}
+SaveConfig = false
+
+# DNS configuration for middle node (different provider)
+DNS = {{ dns_servers | join(', ') }}
+
+# Enable IP forwarding
+PostUp = sysctl -w net.ipv4.ip_forward=1
+PostUp = sysctl -w net.ipv6.conf.all.forwarding=1
+
+# Routing between previous and next hop
+PostUp = ip route add {{ prev_hop_subnet }} dev %i
+PostUp = ip route add {{ next_hop_subnet }} dev %i
+
+# Forward traffic between hops
+PostUp = iptables -A FORWARD -i %i -j ACCEPT
+PostUp = iptables -A FORWARD -o %i -j ACCEPT
+PostUp = iptables -t nat -A POSTROUTING -s {{ prev_hop_subnet }} -d {{ next_hop_subnet }} -j MASQUERADE
+
+# Traffic obfuscation (optional)
+{% if obfuscation_enabled %}
+PostUp = /usr/local/bin/start_obfuscation.sh {{ wireguard_port }}
+PostDown = /usr/local/bin/stop_obfuscation.sh {{ wireguard_port }}
+{% endif %}
+
+# DNS isolation - use different DoH provider
+PostUp = systemctl restart dnscrypt-proxy
+PostUp = iptables -t nat -A PREROUTING -i %i -p udp --dport 53 -j REDIRECT --to-port 5354
+PostUp = iptables -t nat -A PREROUTING -i %i -p tcp --dport 53 -j REDIRECT --to-port 5354
+
+# Cleanup
+PostDown = iptables -D FORWARD -i %i -j ACCEPT
+PostDown = iptables -D FORWARD -o %i -j ACCEPT
+PostDown = iptables -t nat -D POSTROUTING -s {{ prev_hop_subnet }} -d {{ next_hop_subnet }} -j MASQUERADE
+PostDown = iptables -t nat -D PREROUTING -i %i -p udp --dport 53 -j REDIRECT --to-port 5354
+PostDown = iptables -t nat -D PREROUTING -i %i -p tcp --dport 53 -j REDIRECT --to-port 5354
+
+# Previous hop peer
+[Peer]
+# Previous Hop: {{ prev_hop_server }}
+PublicKey = {{ prev_hop_public_key }}
+AllowedIPs = {{ prev_hop_subnet }}
+Endpoint = {{ prev_hop_endpoint }}
+
+# Next hop peer
+[Peer]
+# Next Hop: {{ next_hop_server }}
+PublicKey = {{ next_hop_public_key }}
+AllowedIPs = {{ next_hop_subnet }}
+Endpoint = {{ next_hop_endpoint }}
+PersistentKeepalive = 25

@@ -1,0 +1,35 @@
+pyyaml>=6.0
+ansible>=2.10.0
+qrcode>=7.3
+pillow>=9.0.0
+cryptography>=3.4.8
+jinja2>=3.0.0
+netaddr>=0.8.0
+paramiko>=2.9.0
+
+# Web framework dependencies
+flask>=2.0.0
+flask-socketio>=5.0.0
+flask-restful>=0.3.9
+
+# Cloud provider dependencies
+azure-storage-blob>=12.0.0
+google-cloud-storage>=2.0.0
+boto3>=1.20.0
+
+# Async and networking
+aiohttp>=3.8.0
+ldap3>=2.9.0
+certifi>=2021.5.30
+tldextract>=3.1.0
+
+# Testing dependencies
+pytest>=7.0.0
+pytest-cov>=4.0.0
+pytest-mock>=3.6.0
+pytest-asyncio>=0.20.0
+
+# Code quality
+mypy>=1.0.0
+bandit>=1.7.0
+safety>=2.0.0

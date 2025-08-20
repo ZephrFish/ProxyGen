@@ -1,0 +1,74 @@
+server:
+  instance_type:
+    aws: t3.nano    # Default: cheapest option (~$3.80/month)
+    azure: Standard_B1s  # Default: cheapest option (~$3.80/month)
+    digitalocean: s-1vcpu-1gb  # Default: cheapest option (~$6/month)
+    hetzner: cx11  # Default: cheapest option (~€3.29/month)
+  wireguard_port: 51820
+  wireguard_interface: wg0
+  subnet: 10.0.0.0/24
+  dns:
+    - 1.1.1.1
+    - 1.0.0.1
+
+security:
+  allowed_ips:
+    - 0.0.0.0/0  # Change this to restrict SSH access
+  key_size: 2048
+  keepalive: 25
+
+monitoring:
+  enabled: true
+  metrics:
+    - connections
+    - bandwidth
+    - latency
+  alert_email: ""  # Add email for alerts
+
+regions:
+  aws:
+    us-east-1: US East (N. Virginia)
+    us-west-2: US West (Oregon)
+    eu-west-1: EU (Ireland)
+    eu-central-1: EU (Frankfurt)
+    ap-southeast-1: Asia Pacific (Singapore)
+    ap-northeast-1: Asia Pacific (Tokyo)
+    ca-central-1: Canada (Montreal)
+    sa-east-1: South America (São Paulo)
+    ap-south-1: Asia Pacific (Mumbai)
+    eu-north-1: EU (Stockholm)
+  azure:
+    eastus: East US
+    westus2: West US 2
+    westeurope: West Europe
+    northeurope: North Europe
+    southeastasia: Southeast Asia
+    japaneast: Japan East
+    brazilsouth: Brazil South
+    australiaeast: Australia East
+    canadacentral: Canada Central
+    uksouth: UK South
+  digitalocean:
+    nyc1: New York 1
+    nyc3: New York 3
+    sfo3: San Francisco 3
+    ams3: Amsterdam 3
+    sgp1: Singapore 1
+    lon1: London 1
+    fra1: Frankfurt 1
+    tor1: Toronto 1
+    blr1: Bangalore 1
+    syd1: Sydney 1
+  hetzner:
+    fsn1: Falkenstein
+    nbg1: Nuremberg
+    hel1: Helsinki
+    ash: Ashburn
+    hil: Hillsboro
+
+# Advanced settings
+advanced:
+  mtu: 1420
+  max_clients: 254
+  backup_retention_days: 30
+  log_level: info

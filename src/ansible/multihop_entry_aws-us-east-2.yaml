@@ -1,0 +1,11 @@
+- hosts: aws-us-east-2
+  name: Configure entry node for multi-hop
+  tasks:
+  - name: Configure as entry node
+    template:
+      dest: /etc/wireguard/wg0.conf
+      src: multihop_entry.j2
+  - include_tasks: setup_doh.yaml
+    name: Setup DoH for entry node
+    vars:
+      doh_provider: cloudflare

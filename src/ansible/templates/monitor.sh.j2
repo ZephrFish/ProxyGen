@@ -1,0 +1,60 @@
+#!/bin/bash
+# WireGuard Monitoring Script
+
+INTERFACE="{{ wireguard_interface }}"
+LOG_FILE="/var/log/wireguard-monitor.log"
+MAX_LOG_SIZE=10485760  # 10MB
+
+# Function to log messages
+log_message() {
+    echo "$(date '+%Y-%m-%d %H:%M:%S') - $1" >> "$LOG_FILE"
+}
+
+# Rotate log if it's too large
+if [ -f "$LOG_FILE" ] && [ $(stat -f%z "$LOG_FILE" 2>/dev/null || stat -c%s "$LOG_FILE" 2>/dev/null) -gt $MAX_LOG_SIZE ]; then
+    mv "$LOG_FILE" "$LOG_FILE.old"
+    touch "$LOG_FILE"
+fi
+
+# Check if WireGuard interface is up
+if ! ip link show "$INTERFACE" &>/dev/null; then
+    log_message "ERROR: WireGuard interface $INTERFACE is down"
+    systemctl restart "wg-quick@$INTERFACE"
+    log_message "INFO: Attempted to restart WireGuard service"
+    exit 1
+fi
+
+# Get interface statistics
+RX_BYTES=$(cat "/sys/class/net/$INTERFACE/statistics/rx_bytes" 2>/dev/null || echo 0)
+TX_BYTES=$(cat "/sys/class/net/$INTERFACE/statistics/tx_bytes" 2>/dev/null || echo 0)
+PEERS=$(wg show "$INTERFACE" peers | wc -l)
+LATEST_HANDSHAKES=$(wg show "$INTERFACE" latest-handshakes | awk '$2 > 0' | wc -l)
+
+# Log statistics
+log_message "INFO: Interface=$INTERFACE RX=$RX_BYTES TX=$TX_BYTES Peers=$PEERS Active=$LATEST_HANDSHAKES"
+
+# Check for inactive peers (no handshake in last 5 minutes)
+CURRENT_TIME=$(date +%s)
+while read -r peer timestamp; do
+    if [ -n "$timestamp" ] && [ "$timestamp" -gt 0 ]; then
+        TIME_DIFF=$((CURRENT_TIME - timestamp))
+        if [ $TIME_DIFF -gt 300 ]; then
+            log_message "WARNING: Peer $peer inactive for $TIME_DIFF seconds"
+        fi
+    fi
+done < <(wg show "$INTERFACE" latest-handshakes)
+
+# Check system resources
+CPU_USAGE=$(top -bn1 | grep "Cpu(s)" | sed "s/.*, *\([0-9.]*\)%* id.*/\1/" | awk '{print 100 - $1}')
+MEM_USAGE=$(free | grep Mem | awk '{print ($3/$2) * 100.0}')
+
+log_message "INFO: CPU Usage=${CPU_USAGE}% Memory Usage=${MEM_USAGE}%"
+
+# Alert if resources are high
+if (( $(echo "$CPU_USAGE > 80" | bc -l) )); then
+    log_message "WARNING: High CPU usage detected: ${CPU_USAGE}%"
+fi
+
+if (( $(echo "$MEM_USAGE > 90" | bc -l) )); then
+    log_message "WARNING: High memory usage detected: ${MEM_USAGE}%"
+fi

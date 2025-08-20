@@ -1,0 +1,87 @@
+# DNSCrypt-Proxy Configuration for Multi-Hop Proxy
+# Provider: {{ doh_provider }}
+
+# Network settings
+listen_addresses = ['127.0.0.1:5353', '[::1]:5353']
+max_clients = 250
+ipv4_servers = true
+ipv6_servers = true
+dnscrypt_servers = true
+doh_servers = true
+require_dnssec = true
+require_nolog = true
+require_nofilter = true
+force_tcp = false
+
+# Performance settings
+cache = true
+cache_size = 4096
+cache_min_ttl = 2400
+cache_max_ttl = 86400
+cache_neg_min_ttl = 60
+cache_neg_max_ttl = 600
+
+# Security settings
+tls_disable_session_tickets = true
+tls_cipher_suite = [52392, 49199]
+fallback_resolvers = ['1.1.1.1:53', '8.8.8.8:53']
+ignore_system_dns = true
+netprobe_timeout = 60
+netprobe_address = '1.1.1.1:53'
+
+# DoH servers configuration
+[static]
+  [static.'{{ doh_provider }}-doh']
+  stamp = 'sdns://{{ provider_config.stamp }}'
+  
+  {% if doh_provider == 'cloudflare' %}
+  [static.'cloudflare-doh']
+  stamp = 'sdns://AgcAAAAAAAAABzEuMS4xLjEAEmNsb3VkZmxhcmUtZG5zLmNvbQovZG5zLXF1ZXJ5'
+  
+  [static.'cloudflare-doh-ipv6']
+  stamp = 'sdns://AgcAAAAAAAAAGVsyNjA2OjQ3MDA6NDcwMDo6MTExMV06NTAN'
+  {% endif %}
+  
+  {% if doh_provider == 'quad9' %}
+  [static.'quad9-doh']
+  stamp = 'sdns://AgYAAAAAAAAACDkuOS45LjkADGRucy5xdWFkOS5uZXQKL2Rucy1xdWVyeQ'
+  {% endif %}
+  
+  {% if doh_provider == 'nextdns' %}
+  [static.'nextdns-doh']
+  stamp = 'sdns://AgcAAAAAAAAACjQ1LjkwLjI4LjAADGRucy5uZXh0ZG5zLmlvBy9kbnMtcXVlcnk'
+  {% endif %}
+
+# Query logging (for debugging)
+[query_log]
+  file = '/var/log/dnscrypt-proxy/query.log'
+  format = 'tsv'
+  ignored_qtypes = ['DNSKEY', 'NS']
+
+# Filtering
+[blocked_names]
+  blocked_names_file = '/etc/dnscrypt-proxy/blocked-names.txt'
+
+[blocked_ips]
+  blocked_ips_file = '/etc/dnscrypt-proxy/blocked-ips.txt'
+
+# Anonymized DNS
+[anonymized_dns]
+  routes = [
+    { server_name='{{ doh_provider }}-doh', via=['anon-cs-fr', 'anon-cs-nl'] }
+  ]
+  skip_incompatible = true
+
+# Sources
+[sources]
+  [sources.'public-resolvers']
+  urls = ['https://raw.githubusercontent.com/DNSCrypt/dnscrypt-resolvers/master/v3/public-resolvers.md', 'https://download.dnscrypt.info/resolvers-list/v3/public-resolvers.md']
+  cache_file = '/var/cache/dnscrypt-proxy/public-resolvers.md'
+  minisign_key = 'RWQf6LRCGA9i53mlYecO4IzT51TGPpvWucNSCh1CBM0QTaLn73Y7GFO3'
+  prefix = ''
+  
+  [sources.'relays']
+  urls = ['https://raw.githubusercontent.com/DNSCrypt/dnscrypt-resolvers/master/v3/relays.md', 'https://download.dnscrypt.info/resolvers-list/v3/relays.md']
+  cache_file = '/var/cache/dnscrypt-proxy/relays.md'
+  minisign_key = 'RWQf6LRCGA9i53mlYecO4IzT51TGPpvWucNSCh1CBM0QTaLn73Y7GFO3'
+  prefix = ''

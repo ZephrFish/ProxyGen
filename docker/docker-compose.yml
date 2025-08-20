@@ -1,0 +1,106 @@
+version: '3.8'
+
+services:
+  proxygen:
+    build: .
+    container_name: proxygen
+    image: proxygen:latest
+    privileged: true
+    cap_add:
+      - NET_ADMIN
+      - SYS_MODULE
+    volumes:
+      - ./state:/app/state
+      - ./configs:/app/configs
+      - ./logs:/app/logs
+      - /lib/modules:/lib/modules:ro
+    environment:
+      # AWS credentials
+      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
+      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
+      - AWS_DEFAULT_REGION=${AWS_DEFAULT_REGION:-us-east-1}
+      # Azure credentials
+      - ARM_CLIENT_ID=${ARM_CLIENT_ID}
+      - ARM_CLIENT_SECRET=${ARM_CLIENT_SECRET}
+      - ARM_TENANT_ID=${ARM_TENANT_ID}
+      - ARM_SUBSCRIPTION_ID=${ARM_SUBSCRIPTION_ID}
+      # DigitalOcean credentials
+      - DIGITALOCEAN_TOKEN=${DIGITALOCEAN_TOKEN}
+      # Hetzner credentials
+      - HCLOUD_TOKEN=${HCLOUD_TOKEN}
+      # ProxyGen settings
+      - PROXYGEN_SECRET_KEY=${PROXYGEN_SECRET_KEY}
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+    networks:
+      - proxygen_network
+    restart: unless-stopped
+    command: ["python3", "proxygen"]
+
+  proxygen-api:
+    build: .
+    container_name: proxygen-api
+    image: proxygen:latest
+    ports:
+      - "5000:5000"
+    volumes:
+      - ./state:/app/state
+      - ./configs:/app/configs
+      - ./logs:/app/logs
+    environment:
+      - PROXYGEN_SECRET_KEY=${PROXYGEN_SECRET_KEY}
+      - FLASK_ENV=${FLASK_ENV:-production}
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+    networks:
+      - proxygen_network
+    restart: unless-stopped
+    command: ["python3", "api/app.py"]
+    depends_on:
+      - proxygen
+
+  redis:
+    image: redis:7-alpine
+    container_name: proxygen-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - proxygen_network
+    restart: unless-stopped
+    command: redis-server --appendonly yes
+
+  postgres:
+    image: postgres:15-alpine
+    container_name: proxygen-db
+    environment:
+      - POSTGRES_DB=proxygen
+      - POSTGRES_USER=proxygen
+      - POSTGRES_PASSWORD=${DB_PASSWORD:-changeme}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - proxygen_network
+    restart: unless-stopped
+
+  nginx:
+    image: nginx:alpine
+    container_name: proxygen-nginx
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./ssl:/etc/nginx/ssl:ro
+    networks:
+      - proxygen_network
+    restart: unless-stopped
+    depends_on:
+      - proxygen-api
+
+networks:
+  proxygen_network:
+    driver: bridge
+
+volumes:
+  redis_data:
+  postgres_data:

@@ -1,0 +1,56 @@
+# Multi-Hop Exit Node Configuration
+# Role: Exit point for multi-hop chain
+# Server: {{ server_id }}
+
+[Interface]
+Address = {{ internal_ip }}/24
+PrivateKey = {{ wireguard_private_key }}
+ListenPort = {{ wireguard_port }}
+SaveConfig = false
+
+# DNS configuration for exit node (final DoH provider)
+DNS = {{ dns_servers | join(', ') }}
+
+# Enable IP forwarding
+PostUp = sysctl -w net.ipv4.ip_forward=1
+PostUp = sysctl -w net.ipv6.conf.all.forwarding=1
+
+# NAT for internet access
+PostUp = iptables -A FORWARD -i %i -j ACCEPT
+PostUp = iptables -A FORWARD -o %i -j ACCEPT
+PostUp = iptables -t nat -A POSTROUTING -o {{ external_interface | default('eth0') }} -j MASQUERADE
+
+# DNS leak prevention
+PostUp = iptables -A OUTPUT -p udp --dport 53 -m owner ! --uid-owner dnscrypt-proxy -j DROP
+PostUp = iptables -A OUTPUT -p tcp --dport 53 -m owner ! --uid-owner dnscrypt-proxy -j DROP
+
+# Force all DNS through DoH
+PostUp = iptables -t nat -A OUTPUT -p udp --dport 53 -j REDIRECT --to-port 5355
+PostUp = iptables -t nat -A OUTPUT -p tcp --dport 53 -j REDIRECT --to-port 5355
+
+# IPv6 leak prevention
+PostUp = ip6tables -A FORWARD -i %i -j ACCEPT
+PostUp = ip6tables -A FORWARD -o %i -j ACCEPT
+PostUp = ip6tables -t nat -A POSTROUTING -o {{ external_interface | default('eth0') }} -j MASQUERADE
+
+# Traffic analysis prevention
+PostUp = iptables -t mangle -A POSTROUTING -o {{ external_interface | default('eth0') }} -j TCPMSS --clamp-mss-to-pmtu
+
+# Cleanup
+PostDown = iptables -D FORWARD -i %i -j ACCEPT
+PostDown = iptables -D FORWARD -o %i -j ACCEPT
+PostDown = iptables -t nat -D POSTROUTING -o {{ external_interface | default('eth0') }} -j MASQUERADE
+PostDown = iptables -D OUTPUT -p udp --dport 53 -m owner ! --uid-owner dnscrypt-proxy -j DROP
+PostDown = iptables -D OUTPUT -p tcp --dport 53 -m owner ! --uid-owner dnscrypt-proxy -j DROP
+PostDown = iptables -t nat -D OUTPUT -p udp --dport 53 -j REDIRECT --to-port 5355
+PostDown = iptables -t nat -D OUTPUT -p tcp --dport 53 -j REDIRECT --to-port 5355
+PostDown = ip6tables -D FORWARD -i %i -j ACCEPT
+PostDown = ip6tables -D FORWARD -o %i -j ACCEPT
+PostDown = ip6tables -t nat -D POSTROUTING -o {{ external_interface | default('eth0') }} -j MASQUERADE
+
+# Previous hop peer
+[Peer]
+# Previous Hop: {{ prev_hop_server }}
+PublicKey = {{ prev_hop_public_key }}
+AllowedIPs = {{ prev_hop_subnet }}
+Endpoint = {{ prev_hop_endpoint }}
