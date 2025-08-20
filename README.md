@@ -62,7 +62,7 @@ brew install python@3.11 terraform ansible awscli azure-cli
 
 ```bash
 # Clone repository
-git clone <repository-url>
+git clone https://github.com/ZephrFish/ProxyGen
 cd proxygen
 
 # Make executable
