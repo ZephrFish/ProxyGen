@@ -4,6 +4,8 @@ Multi-cloud secure proxy deployment tool for AWS, Azure, DigitalOcean, and Hetzn
 
 > **Provider Status**: DigitalOcean and Hetzner Cloud support are currently in **ALPHA** - semi-tested and may require manual intervention. AWS and Azure are fully supported.
 
+_Blog post coming soon_
+
 ## Quick Start
 
 ```bash
